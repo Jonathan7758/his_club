@@ -2,7 +2,7 @@
 SeriesDesigner v4.0 — 主主题→7维子系列拆分
 每个子系列: 名称(公众号化) / 核心观点 / 内容大纲 / 金句
 """
-from src.forum_engine import DIMENSIONS, parse_json_response
+from forum_engine import DIMENSIONS, parse_json_response
 
 DIMENSION_LABELS = {
     "政治制度": "政",

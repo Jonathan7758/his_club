@@ -675,7 +675,7 @@ def cleanup_expired_sessions(days: int = 7) -> int:
 
 
 # Import at bottom to avoid circular — needed by save_analysis_session et al.
-from src.session_manager import SessionState
+from session_manager import SessionState
 
 if __name__ == "__main__":
     print("Initializing database...")

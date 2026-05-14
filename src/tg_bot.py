@@ -3,7 +3,7 @@ Telegram Bot Handler v4.0
 TG命令处理 + 消息路由 + session绑定
 依赖: session_manager.py
 """
-from src.session_manager import SessionManager, SessionState, CONTENT_ACCEPTING_STATES
+from session_manager import SessionManager, SessionState, CONTENT_ACCEPTING_STATES
 
 
 class TGBotHandler:
