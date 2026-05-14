@@ -6,14 +6,18 @@ Feishu Bot Runner v4.0
 import os
 import sys
 import asyncio
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from session_manager import SessionManager
 from feishu_bot import FeishuBotHandler
 
+channel = None
+
 
 async def main():
+    global channel
     app_id = os.environ.get("LARK_APP_ID", "")
     app_secret = os.environ.get("LARK_APP_SECRET", "")
 
@@ -44,8 +48,24 @@ async def main():
 
     channel.on("message", on_message)
 
-    print("Feishu bot connecting via WebSocket...")
-    await channel.connect()
+    print("Feishu bot starting via WebSocket...")
+
+    def run_sync():
+        try:
+            channel.start()
+        except Exception as e:
+            print(f"Bot stopped: {e}")
+
+    thread = threading.Thread(target=run_sync, daemon=True)
+    thread.start()
+
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        if channel:
+            channel.stop()
+        print("Bot stopped.")
 
 
 if __name__ == "__main__":
