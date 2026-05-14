@@ -79,6 +79,7 @@ def main():
     channel.on("reconnecting", on_reconnecting)
     channel.on("reconnected", on_reconnected)
     channel.on("error", on_error)
+    channel.update_policy(require_mention=False)
 
     def shutdown(signum, frame):
         print("Shutting down...")
