@@ -8,8 +8,11 @@ openai>=1.0
 fastapi>=0.100
 uvicorn>=0.20
 
-# TG Bot
+# TG Bot (本地开发)
 python-telegram-bot>=22.0
+
+# Feishu Bot (生产部署)
+lark-oapi>=1.6
 
 # Database
 psycopg2-binary>=2.9
