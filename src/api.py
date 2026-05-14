@@ -9,7 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_script_dir)
+sys.path.insert(0, _parent_dir)
+sys.path.insert(0, _script_dir)
 from env_loader import load_env
 load_env()
 

@@ -4,7 +4,7 @@ Feishu Bot Runner v4.0
 """
 import os
 import sys
-import signal
+import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -12,7 +12,7 @@ from session_manager import SessionManager
 from feishu_bot import FeishuBotHandler
 
 
-def main():
+async def main():
     app_id = os.environ.get("LARK_APP_ID", "")
     app_secret = os.environ.get("LARK_APP_SECRET", "")
     if not app_id or not app_secret:
@@ -41,16 +41,15 @@ def main():
 
     channel.on("message", on_message)
 
-    def shutdown(signum, frame):
-        print("Shutting down...")
-        channel.stop()
-
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
-
-    print("Feishu bot starting via WebSocket...")
-    channel.start()
+    print("Feishu bot connecting via WebSocket...")
+    await channel.connect()
+    print("Disconnected.")
 
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        pass
