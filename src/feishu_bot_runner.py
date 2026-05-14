@@ -1,23 +1,18 @@
 """
 Feishu Bot Runner v4.0
-飞书 Bot 启动入口 — 使用 lark-oapi Channel 模块 (WebSocket)
-无需公网地址, 飞书服务器在国内可直接连接
+飞书 Bot 启动入口 — 使用 lark-oapi Channel 模块同步 API (WebSocket)
 """
 import os
 import sys
-import asyncio
-import threading
+import signal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from session_manager import SessionManager
 from feishu_bot import FeishuBotHandler
 
-channel = None
 
-
-async def main():
-    global channel
+def main():
     app_id = os.environ.get("LARK_APP_ID", "")
     app_secret = os.environ.get("LARK_APP_SECRET", "")
 
@@ -48,25 +43,16 @@ async def main():
 
     channel.on("message", on_message)
 
+    def shutdown(signum, frame):
+        print("Shutting down...")
+        channel.stop()
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
     print("Feishu bot starting via WebSocket...")
-
-    def run_sync():
-        try:
-            channel.start()
-        except Exception as e:
-            print(f"Bot stopped: {e}")
-
-    thread = threading.Thread(target=run_sync, daemon=True)
-    thread.start()
-
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, SystemExit):
-        if channel:
-            channel.stop()
-        print("Bot stopped.")
+    channel.start()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
