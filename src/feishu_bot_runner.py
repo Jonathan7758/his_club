@@ -16,7 +16,7 @@ def patch_ws_client():
 
     async def _patched_connect(self):
         await _orig_connect(self)
-        print("[ws] _connect done, starting event loop")
+        print("[ws] _connect done", flush=True)
 
     wsc.Client._connect = _patched_connect
 
@@ -24,10 +24,10 @@ def patch_ws_client():
         async def _run():
             try:
                 await self._connect()
-                print("[ws] connected, entering event loop")
+                print("[ws] connected, entering event loop", flush=True)
                 await asyncio.Event().wait()
             except Exception as e:
-                print(f"[ws] disconnected: {e}")
+                print(f"[ws] disconnected: {e}", flush=True)
 
         asyncio.run(_run())
 
@@ -53,27 +53,27 @@ def main():
 
     async def on_message(msg):
         text = (msg.content_text or "").strip()
-        print(f"[msg] chat={msg.chat_id} text={text[:120]}")
+        print(f"[msg] chat={msg.chat_id} text={text[:120]}", flush=True)
         if not text:
             return
         try:
             reply = handler.handle_message(chat_id=msg.chat_id, text=text)
             if reply:
-                print(f"[send] -> {msg.chat_id}")
+                print(f"[send] -> {msg.chat_id}", flush=True)
                 await channel.send(msg.chat_id, {"text": reply[:4096]})
         except Exception as e:
-            print(f"[error] {e}")
+            print(f"[error] {e}", flush=True)
             import traceback
             traceback.print_exc()
 
     async def on_reconnecting():
-        print("[event] reconnecting...")
+        print("[event] reconnecting...", flush=True)
 
     async def on_reconnected():
-        print("[event] reconnected")
+        print("[event] reconnected", flush=True)
 
     def on_error(err):
-        print(f"[event] error: {err}")
+        print(f"[event] error: {err}", flush=True)
 
     channel.on("message", on_message)
     channel.on("reconnecting", on_reconnecting)
