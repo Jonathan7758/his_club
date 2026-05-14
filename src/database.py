@@ -109,6 +109,32 @@ def init_db():
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS analysis_sessions (
+            id VARCHAR(16) PRIMARY KEY,
+            tg_chat_id BIGINT NOT NULL,
+            status VARCHAR(20) DEFAULT 'WAITING_CONTENT',
+            raw_content TEXT,
+            main_topic TEXT,
+            key_points JSONB,
+            analysis JSONB,
+            scores JSONB,
+            sub_series JSONB,
+            sub_scores JSONB,
+            doc_md TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS series_designs (
+            id VARCHAR(16) PRIMARY KEY,
+            session_id VARCHAR(16) REFERENCES analysis_sessions(id),
+            main_topic TEXT NOT NULL,
+            sub_topics JSONB NOT NULL,
+            full_doc_md TEXT,
+            full_doc_json JSONB,
+            exported_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         CREATE INDEX IF NOT EXISTS idx_hot_topics_created ON hot_topics(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_hot_topics_window ON hot_topics(window_type, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_posts_topic ON posts(topic_id);
@@ -474,6 +500,182 @@ def get_comments_stats(days: int = 7) -> dict:
     conn.close()
     return {"total_comments": total_comments, "platform_distribution": platform_stats, "period_days": days}
 
+
+def save_analysis_session(session_data: dict) -> str:
+    s = session_data
+    sid = s.get("id", "")
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO analysis_sessions (id, tg_chat_id, status, raw_content, main_topic, key_points, analysis, scores, sub_series, sub_scores, doc_md, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                raw_content = EXCLUDED.raw_content,
+                main_topic = EXCLUDED.main_topic,
+                key_points = EXCLUDED.key_points,
+                analysis = EXCLUDED.analysis,
+                scores = EXCLUDED.scores,
+                sub_series = EXCLUDED.sub_series,
+                sub_scores = EXCLUDED.sub_scores,
+                doc_md = EXCLUDED.doc_md,
+                updated_at = NOW()
+        """, (
+            sid,
+            s.get("tg_chat_id", 0),
+            s.get("status", "WAITING_CONTENT"),
+            s.get("raw_content") or s.get("content"),
+            s.get("main_topic"),
+            json.dumps(s.get("key_points"), ensure_ascii=False) if s.get("key_points") else None,
+            json.dumps(s.get("analysis"), ensure_ascii=False) if s.get("analysis") else None,
+            json.dumps(s.get("scores"), ensure_ascii=False) if s.get("scores") else None,
+            json.dumps(s.get("sub_series"), ensure_ascii=False) if s.get("sub_series") else None,
+            json.dumps(s.get("sub_scores"), ensure_ascii=False) if s.get("sub_scores") else None,
+            s.get("doc_md"),
+        ))
+        conn.commit()
+    except Exception as e:
+        print(f"DB save error for session {sid}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+    return sid
+
+
+def load_analysis_session(session_id: str) -> dict | None:
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM analysis_sessions WHERE id = %s", (session_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        for json_field in ("key_points", "analysis", "scores", "sub_series", "sub_scores"):
+            if data.get(json_field) and isinstance(data[json_field], str):
+                try:
+                    data[json_field] = json.loads(data[json_field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        data["raw_content"] = data.get("raw_content", "")
+        data["content"] = data["raw_content"]
+        data["message_count"] = data.get("message_count", 0)
+        data["char_count"] = len(data.get("raw_content", ""))
+        return data
+    except Exception as e:
+        print(f"DB load error for session {session_id}: {e}")
+        return None
+    finally:
+        cur.close()
+        conn.close()
+
+
+def find_active_session(session_id: str) -> dict | None:
+    result = load_analysis_session(session_id)
+    if result and result.get("status") not in (SessionState.COMPLETED, SessionState.CLOSED):
+        return result
+    return None
+
+
+def find_active_sessions_by_chat(tg_chat_id: int) -> list[dict]:
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT * FROM analysis_sessions
+            WHERE tg_chat_id = %s
+            AND status NOT IN (%s, %s)
+            ORDER BY updated_at DESC
+        """, (tg_chat_id, SessionState.COMPLETED, SessionState.CLOSED))
+        rows = cur.fetchall()
+        results = []
+        for row in rows:
+            data = dict(row)
+            for json_field in ("key_points", "analysis", "scores", "sub_series", "sub_scores"):
+                if data.get(json_field) and isinstance(data[json_field], str):
+                    try:
+                        data[json_field] = json.loads(data[json_field])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            results.append(data)
+        return results
+    except Exception as e:
+        print(f"DB find active error for chat {tg_chat_id}: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()
+
+
+def mark_session_closed(session_id: str) -> None:
+    session = load_analysis_session(session_id)
+    if not session:
+        raise ValueError(f"Session {session_id} not found")
+    if session["status"] != SessionState.COMPLETED:
+        raise ValueError(f"只能关闭 COMPLETED 状态的 session，当前: {session['status']}")
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE analysis_sessions SET status = %s, updated_at = NOW() WHERE id = %s
+        """, (SessionState.CLOSED, session_id))
+        conn.commit()
+    except Exception as e:
+        print(f"DB close error for session {session_id}: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
+
+def cleanup_expired_sessions(days: int = 7) -> int:
+    from datetime import timezone
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, status, updated_at FROM analysis_sessions
+            WHERE status IN (%s, %s)
+            AND updated_at < NOW() - (%s * INTERVAL '1 day')
+        """, (SessionState.CLOSED, SessionState.COMPLETED, days))
+
+        expired = cur.fetchall()
+        ids_to_delete = []
+        ids_to_close = []
+
+        for row in expired:
+            sid, status, updated_at = row
+            if status == SessionState.CLOSED:
+                ids_to_delete.append(sid)
+            elif status == SessionState.COMPLETED:
+                ids_to_close.append(sid)
+
+        count = 0
+
+        for sid in ids_to_close:
+            cur.execute("""
+                UPDATE analysis_sessions SET status = %s, updated_at = NOW() WHERE id = %s
+            """, (SessionState.CLOSED, sid))
+            count += cur.rowcount
+
+        for sid in ids_to_delete:
+            cur.execute("DELETE FROM analysis_sessions WHERE id = %s", (sid,))
+            count += cur.rowcount
+
+        conn.commit()
+        return count
+    except Exception as e:
+        print(f"DB cleanup error: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+
+# Import at bottom to avoid circular — needed by save_analysis_session et al.
+from src.session_manager import SessionState
 
 if __name__ == "__main__":
     print("Initializing database...")

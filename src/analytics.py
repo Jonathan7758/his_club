@@ -203,8 +203,8 @@ def compare_to_benchmark(topic: str, structure: dict, article_text: str) -> dict
 
 
 def check_wechat_overlap(detected_topic: str, thesis: str) -> dict:
-    from generator import _weixin_search
-    results = _weixin_search(detected_topic, max_results=10)
+    from search import weixin_search
+    results = weixin_search(detected_topic, max_results=10)
     valid = [r for r in results if r != "无公众号文章"]
     overlap = min(len(valid), 10)
     score = max(10, 100 - overlap * 8)

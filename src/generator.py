@@ -25,47 +25,7 @@ def _call_llm(prompt: str, temperature: float = 0.8, max_tokens: int = 2000) -> 
     )
     return resp.choices[0].message.content
 
-def _weixin_search(query: str, max_results: int = 10) -> list[str]:
-    """搜狗微信搜索——直接在公众号池子里查竞品（新颖度验证最佳来源）"""
-    try:
-        import requests
-        from bs4 import BeautifulSoup
-        url = f"https://weixin.sogou.com/weixin?type=2&query={requests.utils.quote(query)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-        results = []
-        for li in soup.select(".news-list li")[:max_results]:
-            title_el = li.select_one("h3 a, .tit a")
-            desc_el = li.select_one("p, .txt-info")
-            if title_el:
-                title = title_el.get_text(strip=True)
-                desc = desc_el.get_text(strip=True)[:200] if desc_el else ""
-                results.append(f"{title} | {desc}")
-        return results if results else ["无公众号文章"]
-    except:
-        return []
-
-def _sogou_web_search(query: str, max_results: int = 10) -> list[str]:
-    """搜狗网页搜索——查全网中文内容（知乎、豆瓣等平台）"""
-    try:
-        import requests
-        from bs4 import BeautifulSoup
-        url = f"https://www.sogou.com/web?query={requests.utils.quote(query)}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-        results = []
-        for item in soup.select(".vrwrap, .rb, .result")[:max_results]:
-            title_el = item.select_one("h3 a, .vr-title, .vrTitle a")
-            desc_el = item.select_one(".star-wiki, .str-text, .space-txt, .vr_summary, p")
-            if title_el:
-                title = title_el.get_text(strip=True)
-                desc = desc_el.get_text(strip=True)[:200] if desc_el else ""
-                results.append(f"{title} {desc}")
-        return results
-    except:
-        return []
+from search import weixin_search as _weixin_search, sogou_web_search as _sogou_web_search
 
 def _search_verify(thesis: str, angle_title: str) -> dict:
     """双源验证：搜狗微信(公众号池) + 搜狗网页(全网)，综合计算真实新颖度"""

@@ -1,17 +1,26 @@
-# CLAUDE.md — 历史公众号AI工作流 开发纲领
+# CLAUDE.md — 历史公众号系列分析引擎 开发纲领
 
-> **最后更新**: 2026-05-06
-> **当前阶段**: MVP v3.0 — 全管道已跑通，35端点全部投产
-> **架构实现度**: ~98% (28/28模块完成)
-> **下次继续**: 见文末 "下一步开发任务"
+> **最后更新**: 2026-05-14
+> **当前阶段**: MVP v3.0 (已冻结) → **v4.0 已完成** ✅
+> **重构方向**: 从"公众号内容生成"重构为"TG驱动的系列分析引擎"
+> **设计文档**: `docs/10-v4-refactor-plan.md` (v4.0唯一权威设计文件)
+> **开发模式**: 严格TDD (RED → GREEN → REFACTOR)
 
 ---
 
 ## 1. 项目概述
 
-**项目名称**：历史公众号AI内容工作流（History Content AI Pipeline）
+**项目名称**：历史公众号系列分析引擎 (History Series Analysis Engine)
 
-**核心目标**：基于 BettaFish/MiroFish 多Agent技术，为微信公众号历史领域内容提供"热点发现→多角度分析→内容生成"的自动化工作流。
+**核心目标**：基于 BettaFish/MiroFish 多Agent技术，为微信公众号历史领域内容运营提供"多角度深度分析→系列子主题设计→MD文档导出"的分析工作流。
+
+**v4.0 关键变化**:
+- ❌ 移除公众号内容生成（图文/视频脚本）
+- ❌ 移除微信API对接
+- ✅ 保留并强化分析层（ForumEngine / MiroFish / 3Engines / 知识图谱）
+- ✅ TG Bot 命令行入口
+- ✅ 3维评分系统（互联网热度 / 角度独特度 / 预测传播热度）
+- ✅ 系列子主题拆分 → MD文档导出
 
 ---
 
@@ -26,29 +35,47 @@
 
 ---
 
-## 3. 当前实现状态
+## 3. v4.0 目标架构
 
-### ✅ 已完成 (28/28 模块)
+### 3.1 模块清单
 
-| 组件 | 文件 | 说明 |
-|------|------|------|
-| BettaFish | `/opt/hisclub/bettafish/` | Flask Web, PostgreSQL, Redis, Playwright |
-| 内容生成器 | generator.py | 7维LLM辩论 + 搜狗双源验证 + 公号图文 + 视频脚本 |
-| HTTP API | api.py | FastAPI :5050, 35个端点 |
-| 管道对接 | connector.py | 一键获取 Markdown/视频简报 |
-| 事实校验层 | fact_checker.py | 断言提取→交叉验证→争议标注→来源追溯 |
-| 数据存储层 | database.py | PostgreSQL, 6表持久化 + comments CRUD |
-| 时间调度器 | scheduler.py | 日6:00扫描/周一8:00汇总/月1日9:00前瞻 |
-| 豆瓣爬虫 | douban.py | 历史书评+小组讨论+标签热书 |
-| MiroFish Lite | mirofish.py | 7方利益体5轮博弈 + 推演→文章管道 |
-| ForumEngine | generator.py | 7维完整 (政治/经济/军事/文化/人物/科技/地理) |
-| MindSpider桥接 | mindspider_bridge.py | v2.0 两阶段同步: content→posts, comment→comments |
-| 知识图谱分析 | graph_analyzer.py | 中心度/聚类/盲区(基于entity_relations) |
-| 3 Engine桥接 | engines.py | QueryEngine/MediaEngine/InsightEngine |
-| 数据看板 | api.py | /stats JSON + /dashboard HTML |
-| 文章诊断 | analytics.py | 7维对比诊断 + 批量分析 + URL抓取 |
-| 监控告警 [NEW] | monitor.py | Sentry+钉钉+日志轮转+磁盘清理 |
-| 公众号对接 [NEW] | wechat_backend.py | Token管理/素材/草稿/发布/统计 |
+```
+src/
+├── tg_bot.py           — ⭐ Telegram Bot入口 (/analysis等命令)
+├── session_manager.py  — ⭐ Session状态机 (内容收集→触发分析)
+├── forum_engine.py     — ⭐ ForumEngine 7维辩论 (从generator.py拆分)
+├── scorer.py           — ⭐ 3维评分引擎 + 证据
+├── series_designer.py  — ⭐ 主主题→子系列拆分
+├── doc_exporter.py     — ⭐ MD系列设计文档导出
+│
+├── hotspot_scanner.py  — ✅ 保留: NewsNow热点扫描(外部数据源)
+├── douban.py           — ✅ 保留: 豆瓣书评+小组(外部数据源)
+├── engines.py          — ✅ 保留: 3引擎桥接(外部数据源)
+├── mirofish.py         — ✅ 保留: 7方利益博弈推演(内部辩论)
+├── graph_analyzer.py   — ✅ 保留: 知识图谱分析(内部辩论)
+├── fact_checker.py     — ✅ 保留: 事实校验(内部辩论)
+├── database.py         — 🔧 重构: 新增 analysis_sessions / series_designs 表
+├── api.py              — 🔧 裁剪: 移除生成类端点, 新增TG webhook
+├── analytics.py        — 🔧 裁剪: 移除文章生成评测部分
+├── scheduler.py        — 🔧 简化: 移除自动生成调度
+├── monitor.py          — ✅ 保留: 告警+监控
+├── mindspider_bridge.py— ✅ 保留
+├── env_loader.py       — ✅ 保留
+│
+├── CONNECTOR.md        — ✕ 移除: connector.py
+└── WECHAT_BACKEND.md   — ✕ 移除: wechat_backend.py
+```
+
+### 3.2 新架构数据流
+
+```
+TG /analysis → session_mgr(收集内容) → 用户确认主题
+  → 外部数据源(hotspot/engines/douban) + 内部辩论(forum_engine/mirofish/graph/fact_check)
+  → scorer(3维评分+证据) → 用户确认
+  → series_designer(7维拆分+子主题) → 用户确认
+  → scorer(子主题独立评分)
+  → doc_exporter(MD导出) → TG返回
+```
 
 ---
 
@@ -58,12 +85,14 @@
 - **数据库**: PostgreSQL 16 (localhost:5432, user:bettafish, pass:bettafish)
 - **搜索验证**: 搜狗微信搜索 + 搜狗网页搜索
 - **爬虫**: NewsNow API + Playwright (MindSpider)
-- **Web**: FastAPI (port 5050)
+- **Web**: FastAPI (port 5050, TG webhook)
+- **TG**: python-telegram-bot
+- **测试**: pytest + pytest-asyncio + pytest-cov
 - **Python**: 3.12.3
 
 ---
 
-## 5. 快速启动命令
+## 5. 快速命令
 
 ```bash
 # SSH到生产服务器
@@ -73,49 +102,58 @@ ssh root@124.174.42.6
 pkill -f api.py
 cd /opt/hisclub && nohup python3 api.py > /tmp/api.log 2>&1 &
 
-# 验证
-curl http://localhost:5050/health
+# 运行测试
+cd /opt/hisclub && python -m pytest tests/ -v
 
-# 测试生成
-curl -X POST http://localhost:5050/generate -H "Content-Type: application/json" -d '{"topic":"安史之乱"}'
-
-# 一键部署（本地执行）
-python C:\projects\Ai-hisclub\deploy.py
+# 测试覆盖率
+cd /opt/hisclub && python -m pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 ---
 
-## 6. 数据流架构
+## 6. 开发指令
 
-```
-NewsNow API ─┬─→ hot_topics (LLM历史过滤)
-             └─→ posts (原始热点)
+### 6.1 TDD 铁律
 
-豆瓣爬虫 ──────→ posts (书评+小组)
+每个新模块必须按以下顺序开发：
+1. **RED**: 写测试 (`tests/test_xxx.py`), 运行确认失败
+2. **GREEN**: 写最少代码使测试通过
+3. **REFACTOR**: 在绿色状态下重构, 保持全绿
 
-generate() ────→ generations (完整JSON)
-             ├─→ entity_relations (LLM NER)
-             └─→ sentiment_labels (LLM 5维情感)
+### 6.2 Phase 执行顺序
 
-MiroFish ──────→ /mirofish/generate (推演→文章)
+1. `session_manager.py` + `tg_bot.py` (基础设施)
+2. `forum_engine.py` (从generator.py拆分)
+3. `scorer.py` (评分引擎)
+4. `series_designer.py` + `doc_exporter.py` (设计+导出)
+5. 旧模块裁撤 (`connector.py`, `wechat_backend.py` 删除)
+6. `api.py` 重构 + `database.py` 新增表
+7. 集成测试 (端到端)
 
-3 Engines ─────→ /analyze/{topic} (并行分析)
+### 6.3 设计权威
 
-调度器 ────────→ 日扫描/周汇总/月前瞻 (自动触发)
-```
+所有v4.0开发决策以 `docs/10-v4-refactor-plan.md` 为准。冲突时以该文档为准。
 
 ---
 
-## 7. 下一步开发任务
+## 7. v3.0 历史存档
 
-**P2: 部署与运营**
-- 部署到生产服务器 (124.174.42.6) 验证所有改动
-- MindSpider `--complete` 大规模爬取启动 → 填充comments表
-- 配置 WECHAT_APPID/WECHAT_APPSECRET 激活公众号完整对接
-- 配置 DINGTALK_WEBHOOK / SENTRY_DSN 激活告警
-- 知识图谱(Neo4j/GraphRAG) — 发现话题密度盲区
-- 事实校验存疑项在文章中的显示优化
+v3.0 (公众号内容生成工作流) 已完成28/28模块, 35端点全部投产。v4.0在此基础上去掉生成层+微信对接, 转为纯分析引擎。如需回看v3.0架构, 参考 git tag `v3.0-final` (如已打标) 或 git log。
 
-**P3: 功能增强**
-- MiroFish推演结果接入生成管道 — "/mirofish/predict" 输出注入 /generate
-- 数据看板(公众号后台回传) — 追踪阅读量/完读率
+---
+
+## 8. 完成情况
+
+| 优先级 | 任务 | 状态 |
+|--------|------|------|
+| **P0** | Phase 1: session_manager + tg_bot (TDD) | ✅ 完成 |
+| **P0** | Phase 2: forum_engine 拆分 (TDD) | ✅ 完成 |
+| **P0** | Phase 3: scorer 评分引擎 (TDD) | ✅ 完成 |
+| **P0** | Phase 4: series_designer + doc_exporter (TDD) | ✅ 完成 |
+| **P0** | Phase 5: 旧模块裁撤 + api重构 (TDD) | ✅ 完成 |
+| **P0** | Phase 6: 集成测试 | ✅ 完成 |
+| **Bonus** | search 搜索验证模块 | ✅ 完成 |
+| P1 | 知识图谱(Neo4j/GraphRAG) — 盲区检测升级 | 后续 |
+| P2 | Web管理面板 | 远期 |
+
+**总计: 164 tests, 0 failures** (6.56s, 14个测试文件)

@@ -18,16 +18,16 @@ def query_engine_search(topic: str, sources: int = 3) -> dict:
 
     # 源1: 搜狗微信搜索
     try:
-        from generator import _weixin_search
-        wx = _weixin_search(topic, max_results=10)
+        from search import weixin_search
+        wx = weixin_search(topic, max_results=10)
         results["sources"]["wechat"] = [r for r in wx if r != "无公众号文章"][:5]
     except:
         results["sources"]["wechat"] = []
 
     # 源2: 搜狗网页搜索
     try:
-        from generator import _sogou_web_search
-        web = _sogou_web_search(topic, max_results=10)
+        from search import sogou_web_search
+        web = sogou_web_search(topic, max_results=10)
         results["sources"]["web"] = web[:5]
     except:
         results["sources"]["web"] = []

@@ -2,10 +2,12 @@
 
 ## 当前状态
 
-历史公众号AI内容工作流 — **MVP v3.0 完成**
-项目文档: `docs/01-08` 共8份设计文档
-开发纲领: `CLAUDE.md`（完整技术细节）
-架构实现度: **~98%** (28/28 模块完成)
+历史公众号系列分析引擎 — **v4.0 已完成** ✅
+v3.0 (公众号内容生成工作流) 已冻结归档
+设计文档: `docs/10-v4-refactor-plan.md` (v4.0 唯一权威)
+开发纲领: `CLAUDE.md` (完整技术细节)
+开发模式: **严格TDD** (RED → GREEN → REFACTOR)
+测试: **164 tests, 0 failures** (全部6个Phase通过)
 
 ## 服务器
 
@@ -14,65 +16,83 @@
 | 生产 | 124.174.42.6 | root/1Qxcjyb!@ |
 | 开发(备) | 115.190.167.220 | root/1Qxcjyb!@ |
 
-## 核心代码 (15 模块)
+## v4.0 模块总览
 
+### 新模块 (TDD先行) ⭐
 ```
 src/
-├── api.py              — FastAPI :5050, 35个端点
-├── generator.py        — ForumEngine 7维辩论 + 双源验证 + 事实校验
-├── hotspot_scanner.py  — NewsNow API + LLM历史过滤 + 豆瓣辅证
-├── database.py         — PostgreSQL 6表持久化（含comments CRUD）
-├── scheduler.py        — 三级时间窗口调度 (日/周/月)
-├── connector.py        — 管道对接模块
-├── fact_checker.py     — 事实断言→交叉验证→争议标注
-├── douban.py           — 豆瓣书评+小组爬虫
-├── mirofish.py         — MiroFish Lite 推演+生成管道
-├── engines.py          — BettaFish 3引擎桥接
-├── graph_analyzer.py   — 知识图谱分析(中心度/聚类/盲区)
-├── mindspider_bridge.py — MindSpider深层爬取桥接 v2.0 (comments表路由)
-├── analytics.py        — 历史文章7维诊断+批量分析
-├── monitor.py          — Sentry+钉钉告警+日志轮转+磁盘清理 [NEW]
-└── wechat_backend.py   — 公众号API对接框架(Token/草稿/发布/统计) [NEW]
+├── tg_bot.py           — Telegram Bot: /analysis /restart /status /export
+├── tg_bot_runner.py    — TG Bot 启动/停止管理
+├── session_manager.py  — Session状态机: 内容收集→触发分析
+├── forum_engine.py     — ForumEngine 7维辩论 (从generator.py拆分)
+├── scorer.py           — 3维评分: 热度/独特度/传播 + 证据
+├── series_designer.py  — 主主题→7维子系列拆分+大纲+金句
+├── doc_exporter.py     — MD系列设计文档导出
+└── search.py           — 搜索验证 (搜狗微信+网页)
 ```
 
-## API 端点总览
-
+### 保留模块 ✅
 ```
-POST /generate              — 选题生成（含事实校验+实体+情感）
-GET  /hotspot               — 今日历史热点
-POST /hotspot/generate      — 热点自动选题+生成
-GET  /health                — 健康检查
-GET  /trends?days=30        — 热点趋势统计
-GET  /topic/{topic}/history  — 话题历史生成记录
-GET  /hotspots/recent?days=7 — 近N天热点
-POST /webhook/trigger/{window} — 手动触发调度(daily/weekly/monthly)
-GET  /scheduler/status      — 调度器状态
-GET  /mirofish/quick/{topic} — "历史如果"快速选题
-POST /mirofish/predict      — 完整历史推演
-POST /mirofish/generate     — 推演→文章一键生成
-GET  /stats                 — 数据看板JSON
-GET  /dashboard             — 数据看板HTML
-GET  /graph/stats           — 知识图谱统计
-GET  /graph/centrality      — 实体中心度
-GET  /graph/clusters        — 话题聚类
-GET  /graph/gaps            — 内容盲区
-GET  /analyze/{topic}       — 三引擎并行分析
-POST /analytics/diagnose    — 单篇文章诊断
-POST /analytics/diagnose/url — URL诊断
-GET  /monitor/health        — 系统健康指标 [NEW]
-GET  /monitor/errors        — 错误统计 [NEW]
-POST /monitor/cleanup       — 磁盘清理触发 [NEW]
-GET  /comments/{post_id}     — 帖子评论查询 [NEW]
-GET  /comments/stats         — 评论统计 [NEW]
-GET  /wechat/status          — 微信对接状态 [NEW]
-POST /wechat/push            — 话题生成→推送微信草稿 [NEW]
-GET  /wechat/stats           — 拉取微信阅读数据 [NEW]
-GET  /wechat/drafts          — 微信草稿箱列表 [NEW]
-GET  /wechat/verify          — 微信服务器验证 [NEW]
+src/
+├── hotspot_scanner.py  — NewsNow热点 (外部数据源)
+├── douban.py           — 豆瓣书评 (外部数据源)
+├── engines.py          — 3引擎桥接 (外部数据源)
+├── mirofish.py         — 7方博弈推演 (内部辩论)
+├── graph_analyzer.py   — 知识图谱 (内部辩论)
+├── fact_checker.py     — 事实校验 (内部辩论)
+├── monitor.py          — 告警+监控
+├── mindspider_bridge.py
+└── env_loader.py
 ```
 
-## 下次继续
+### 重构/裁剪模块 🔧
+```
+src/
+├── database.py   — 新增 analysis_sessions / series_designs 表
+├── api.py        — 移除生成端点, 新增TG webhook
+├── analytics.py  — 裁剪文章评测部分
+└── scheduler.py  — 简化, 移除自动生成
+```
 
-- MindSpider DeepSentimentCrawling: 需克隆 MediaCrawler 子模块（GitHub 被墙，需代理/镜像）
-- 配置 DINGTALK_WEBHOOK / SENTRY_DSN (已可被 Telegram 替代)
-- 知识图谱(Neo4j/GraphRAG) — 发现话题密度盲区
+### 移除模块 ✕
+```
+src/connector.py     — 管道对接
+src/wechat_backend.py — 公众号API
+```
+
+## 测试
+
+```bash
+# 运行全部测试
+python -m pytest tests/ -v
+
+# 运行覆盖率
+python -m pytest tests/ -v --cov=src --cov-report=term-missing
+
+# 运行单个模块测试
+python -m pytest tests/test_scorer.py -v
+```
+
+## 关键约定
+
+1. **TDD铁律**: 禁止跳过测试直接写实现
+2. **设计权威**: 任何设计歧义以 `docs/10-v4-refactor-plan.md` 为准
+3. **Phase顺序**: 严格按 Phase 1→6 执行, 不跳跃
+4. **代码风格**: 参考现有代码库的 Python 规范 (无注释/最小化/docstring仅关键处)
+
+## 完成情况
+
+- ✅ Phase 1: session_manager + tg_bot (基础设施)
+- ✅ Phase 2: forum_engine (7维辩论)
+- ✅ Phase 3: scorer (3维评分引擎)
+- ✅ Phase 4: series_designer + doc_exporter (设计+导出)
+- ✅ Phase 5: 旧模块裁撤 + API重构
+- ✅ Phase 6: 集成测试
+- ✅ Bonus: search (搜索验证模块)
+- **164 tests, 0 failures** — 全部通过
+
+## 后续
+
+- 生产部署: 数据库迁移 + TG webhook 配置
+- P1: 知识图谱(Neo4j/GraphRAG) — 盲区检测升级
+- P2: Web管理面板
