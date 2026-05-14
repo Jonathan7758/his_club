@@ -1,10 +1,11 @@
 """
 Feishu Bot Runner v4.0
-飞书 Bot 启动入口 — 使用 lark-oapi Channel 原生 connect()
+飞书 Bot 启动入口 — 直接在主事件循环上连接 WebSocket
 """
 import os
 import sys
 import asyncio
+import signal
 import logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,9 +19,6 @@ async def main():
     if not app_id or not app_secret:
         print("Error: LARK_APP_ID and LARK_APP_SECRET must be set")
         sys.exit(1)
-
-    import nest_asyncio
-    nest_asyncio.apply()
 
     from lark_oapi.channel import FeishuChannel
     from session_manager import SessionManager
@@ -46,18 +44,28 @@ async def main():
 
     channel.on("message", on_message)
 
-    def shutdown(signum, frame):
+    def shutdown():
         print("Shutting down...")
         asyncio.ensure_future(channel.disconnect())
 
-    import signal
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
+    try:
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGINT, shutdown)
+        loop.add_signal_handler(signal.SIGTERM, shutdown)
+    except NotImplementedError:
+        signal.signal(signal.SIGINT, lambda *_: shutdown())
 
     print("Feishu bot connecting via WebSocket...")
-    await channel.connect()
-    print("Disconnected.")
+
+    channel._start_event_dispatcher()
+    await channel._ws_client._connect()
+
+    print("Connected. Waiting for messages...")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
