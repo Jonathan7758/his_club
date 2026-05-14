@@ -1,6 +1,6 @@
 """
 Feishu Bot Runner v4.0
-飞书 Bot 启动入口 — 使用 lark-oapi Channel 模块
+飞书 Bot 启动入口 — 使用 lark-oapi Channel 原生 connect()
 """
 import os
 import sys
@@ -12,32 +12,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
-def patch_ws_client():
-    """Fix lark-oapi 1.6.1: missing set_event_loop + missing run_forever"""
-    import lark_oapi.ws.client as wsc
-
-    def _patched_start(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self._connect())
-            loop.run_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            loop.run_until_complete(self._disconnect())
-
-    wsc.Client.start = _patched_start
-
-
-def main():
+async def main():
     app_id = os.environ.get("LARK_APP_ID", "")
     app_secret = os.environ.get("LARK_APP_SECRET", "")
     if not app_id or not app_secret:
         print("Error: LARK_APP_ID and LARK_APP_SECRET must be set")
         sys.exit(1)
 
-    patch_ws_client()
+    import nest_asyncio
+    nest_asyncio.apply()
 
     from lark_oapi.channel import FeishuChannel
     from session_manager import SessionManager
@@ -65,15 +48,16 @@ def main():
 
     def shutdown(signum, frame):
         print("Shutting down...")
-        channel.stop()
+        asyncio.ensure_future(channel.disconnect())
 
     import signal
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    print("Feishu bot starting via WebSocket...")
-    channel.start()
+    print("Feishu bot connecting via WebSocket...")
+    await channel.connect()
+    print("Disconnected.")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
