@@ -12,10 +12,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def patch_ws_client():
     import lark_oapi.ws.client as wsc
 
+    _orig_connect = wsc.Client._connect
+
+    async def _patched_connect(self):
+        await _orig_connect(self)
+        print("[ws] _connect done, starting event loop")
+
+    wsc.Client._connect = _patched_connect
+
     def _patched_start(self):
         async def _run():
-            await self._connect()
-            await asyncio.Event().wait()
+            try:
+                await self._connect()
+                print("[ws] connected, entering event loop")
+                await asyncio.Event().wait()
+            except Exception as e:
+                print(f"[ws] disconnected: {e}")
+
         asyncio.run(_run())
 
     wsc.Client.start = _patched_start
@@ -53,7 +66,19 @@ def main():
             import traceback
             traceback.print_exc()
 
+    async def on_reconnecting():
+        print("[event] reconnecting...")
+
+    async def on_reconnected():
+        print("[event] reconnected")
+
+    def on_error(err):
+        print(f"[event] error: {err}")
+
     channel.on("message", on_message)
+    channel.on("reconnecting", on_reconnecting)
+    channel.on("reconnected", on_reconnected)
+    channel.on("error", on_error)
 
     def shutdown(signum, frame):
         print("Shutting down...")
