@@ -1,6 +1,5 @@
 """
 Feishu Bot Runner v4.0
-飞书 Bot 启动入口 — 已验证能稳定连接 WebSocket
 """
 import os
 import sys
@@ -14,15 +13,10 @@ def patch_ws_client():
     import lark_oapi.ws.client as wsc
 
     def _patched_start(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self._connect())
-            loop.run_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            loop.run_until_complete(self._disconnect())
+        async def _run():
+            await self._connect()
+            await asyncio.Event().wait()
+        asyncio.run(_run())
 
     wsc.Client.start = _patched_start
 
@@ -52,9 +46,12 @@ def main():
         try:
             reply = handler.handle_message(chat_id=msg.chat_id, text=text)
             if reply:
+                print(f"[send] -> {msg.chat_id}")
                 await channel.send(msg.chat_id, {"text": reply[:4096]})
         except Exception as e:
             print(f"[error] {e}")
+            import traceback
+            traceback.print_exc()
 
     channel.on("message", on_message)
 
