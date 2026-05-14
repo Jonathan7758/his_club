@@ -1,12 +1,15 @@
 """
 Feishu Bot Runner v4.0
-飞书 Bot 启动入口 — 官方 FeishuChannel + WebSocket
+飞书 Bot 启动入口 — uvloop + FeishuChannel
 """
 import os
 import sys
 import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import uvloop
+uvloop.install()
 
 
 async def main():
